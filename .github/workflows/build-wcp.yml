@@ -1,0 +1,118 @@
+name: Build GameNative Wine WCP
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 11 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-gamenative-wine-wcp
+  cancel-in-progress: false
+
+env:
+  WCP_GN_WINE_REF: wine-11.3
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+
+    steps:
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h
+
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up build environment
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf \
+            automake \
+            bison \
+            build-essential \
+            curl \
+            flex \
+            gcc-multilib \
+            gettext \
+            git \
+            g++-multilib \
+            libfreetype6-dev \
+            libfreetype6-dev:i386 \
+            libpng-dev \
+            libpng-dev:i386 \
+            libtool \
+            mingw-w64 \
+            pkg-config \
+            python3 \
+            tar \
+            unzip \
+            wget \
+            xz-utils \
+            zstd \
+            zlib1g-dev \
+            zlib1g-dev:i386
+
+      - name: Cache termuxfs
+        uses: actions/cache@v4
+        with:
+          path: ~/termuxfs/aarch64
+          key: termuxfs-aarch64-build-20260218
+
+      - name: Cache Android NDK
+        uses: actions/cache@v4
+        with:
+          path: ~/Android/Sdk/ndk/27.3.13750724
+          key: android-ndk-r27d
+
+      - name: Cache LLVM MinGW toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/toolchains/llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64
+          key: bylaws-llvm-mingw-20250920
+
+      - name: Build WCP
+        run: bash ./scripts/build-gamenative-wine.sh out
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gamenative-wine-arm64ec
+          path: out/*
+          retention-days: 30
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          artifact="$(python3 -c 'import json; from pathlib import Path; metadata = json.loads(Path("out/build-metadata.json").read_text()); print(metadata["artifact"])')"
+          release_tag="$(python3 -c 'import json; from pathlib import Path; metadata = json.loads(Path("out/build-metadata.json").read_text()); print(metadata["release_tag"])')"
+          version="$(python3 -c 'import json; from pathlib import Path; metadata = json.loads(Path("out/build-metadata.json").read_text()); print(metadata["version"])')"
+          source_ref="$(python3 -c 'import json; from pathlib import Path; metadata = json.loads(Path("out/build-metadata.json").read_text()); print(metadata["source_ref"])')"
+          artifact_path="out/${artifact}"
+
+          if [[ ! -f "${artifact_path}" ]]; then
+            echo "Expected build output not found: ${artifact_path}" >&2
+            exit 1
+          fi
+
+          if gh release view "${release_tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${release_tag}" "${artifact_path}" --repo "${GITHUB_REPOSITORY}" --clobber
+          else
+            gh release create "${release_tag}" "${artifact_path}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "Wine ${version} arm64ec" \
+              --notes "Automated WCP build from GameNative/wine ref ${source_ref}."
+          fi

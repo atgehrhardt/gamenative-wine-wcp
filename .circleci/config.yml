@@ -1,0 +1,104 @@
+version: 2.1
+
+jobs:
+  build-wcp:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large
+    working_directory: ~/project
+    environment:
+      WCP_GN_WINE_REF: wine-11.3
+    steps:
+      - checkout
+
+      - run:
+          name: Show build environment
+          command: |
+            set -euo pipefail
+            python3 --version
+            uname -a
+
+      - run:
+          name: Install build dependencies
+          command: |
+            set -euo pipefail
+            sudo dpkg --add-architecture i386
+            sudo apt-get update
+            sudo apt-get install -y \
+              autoconf \
+              automake \
+              bison \
+              build-essential \
+              curl \
+              flex \
+              gcc-multilib \
+              gettext \
+              git \
+              g++-multilib \
+              libfreetype6-dev \
+              libfreetype6-dev:i386 \
+              libpng-dev \
+              libpng-dev:i386 \
+              libtool \
+              mingw-w64 \
+              pkg-config \
+              python3 \
+              tar \
+              unzip \
+              wget \
+              xz-utils \
+              zstd \
+              zlib1g-dev \
+              zlib1g-dev:i386
+
+      - restore_cache:
+          keys:
+            - termuxfs-aarch64-build-20260218
+
+      - restore_cache:
+          keys:
+            - android-ndk-r27d
+
+      - restore_cache:
+          keys:
+            - bylaws-llvm-mingw-20250920
+
+      - run:
+          name: Build WCP
+          command: |
+            set -euo pipefail
+            bash ./scripts/build-gamenative-wine.sh out
+
+      - save_cache:
+          key: termuxfs-aarch64-build-20260218
+          paths:
+            - /home/circleci/termuxfs/aarch64
+
+      - save_cache:
+          key: android-ndk-r27d
+          paths:
+            - /home/circleci/Android/Sdk/ndk/27.3.13750724
+
+      - save_cache:
+          key: bylaws-llvm-mingw-20250920
+          paths:
+            - /home/circleci/toolchains/llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64
+
+      - run:
+          name: List build outputs
+          command: |
+            set -euo pipefail
+            ls -lah out
+
+      - store_artifacts:
+          path: out/build-metadata.json
+          destination: metadata
+
+      - store_artifacts:
+          path: out
+          destination: out
+
+workflows:
+  build:
+    jobs:
+      - build-wcp

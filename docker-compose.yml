@@ -1,0 +1,12 @@
+services:
+  wcp-builder:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    environment:
+      PYTHONPATH: /workspace/src
+    command: ["./scripts/build-latest.sh", "out"]

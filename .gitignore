@@ -1,0 +1,11 @@
+.venv/
+.vscode/
+__pycache__/
+.pytest_cache/
+*.pyc
+dist/
+build/
+out/
+out-*/
+work/
+adb-captures

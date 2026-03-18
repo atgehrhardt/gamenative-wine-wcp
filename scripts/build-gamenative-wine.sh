@@ -340,6 +340,18 @@ if old_egl_config_filter in win32u_opengl and "EGL_OPENGL_ES2_BIT" not in win32u
     win32u_opengl = win32u_opengl.replace(old_egl_config_filter, new_egl_config_filter, 1)
 
 win32u_opengl_path.write_text(win32u_opengl)
+
+winex11_opengl_path = source_dir / "dlls" / "winex11.drv" / "opengl.c"
+winex11_opengl = winex11_opengl_path.read_text()
+
+old_x11drv_init_egl_platform = """static void x11drv_init_egl_platform( struct egl_platform *platform )\n{\n    platform->type = EGL_PLATFORM_X11_KHR;\n    platform->native_display = gdi_display;\n    egl = platform;\n}\n"""
+
+new_x11drv_init_egl_platform = """static void x11drv_init_egl_platform( struct egl_platform *platform )\n{\n#ifdef __ANDROID__\n    platform->type = 0;\n    platform->native_display = 0;\n#else\n    platform->type = EGL_PLATFORM_X11_KHR;\n    platform->native_display = gdi_display;\n#endif\n    egl = platform;\n}\n"""
+
+if old_x11drv_init_egl_platform in winex11_opengl and "platform->type = 0;" not in winex11_opengl:
+    winex11_opengl = winex11_opengl.replace(old_x11drv_init_egl_platform, new_x11drv_init_egl_platform, 1)
+
+winex11_opengl_path.write_text(winex11_opengl)
 PY
 }
 

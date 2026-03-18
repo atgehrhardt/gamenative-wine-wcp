@@ -327,10 +327,17 @@ if old_egl_client_extensions in win32u_opengl and "continuing with Android fallb
 
 old_display_funcs_init = """static void display_funcs_init(void)\n{\n    struct egl_platform *egl, *next;\n    UINT status;\n\n    if (egl_init( &driver_funcs )) TRACE( \"Initialized EGL library\\n\" );\n\n    if ((status = user_driver->pOpenGLInit( WINE_OPENGL_DRIVER_VERSION, &display_funcs, &driver_funcs )))\n        WARN( \"Failed to initialize the driver OpenGL functions, status %#x\\n\", status );\n    init_egl_platforms( &display_funcs, driver_funcs );\n"""
 
-new_display_funcs_init = """static void display_funcs_init(void)\n{\n    struct egl_platform *egl, *next;\n    UINT status;\n#ifdef __ANDROID__\n    const char *wine_x11forceglx = getenv( \"WINE_X11FORCEGLX\" );\n    BOOL force_glx = wine_x11forceglx && atoi( wine_x11forceglx );\n#else\n    BOOL force_glx = FALSE;\n#endif\n\n    if (!force_glx && egl_init( &driver_funcs )) TRACE( \"Initialized EGL library\\n\" );\n    else if (force_glx) TRACE( \"Skipping EGL initialization because WINE_X11FORCEGLX is enabled\\n\" );\n\n    if ((status = user_driver->pOpenGLInit( WINE_OPENGL_DRIVER_VERSION, &display_funcs, &driver_funcs )))\n        WARN( \"Failed to initialize the driver OpenGL functions, status %#x\\n\", status );\n    if (!force_glx) init_egl_platforms( &display_funcs, driver_funcs );\n"""
+old_forced_glx_display_funcs_init = """static void display_funcs_init(void)\n{\n    struct egl_platform *egl, *next;\n    UINT status;\n#ifdef __ANDROID__\n    const char *wine_x11forceglx = getenv( \"WINE_X11FORCEGLX\" );\n    BOOL force_glx = wine_x11forceglx && atoi( wine_x11forceglx );\n#else\n    BOOL force_glx = FALSE;\n#endif\n\n    if (!force_glx && egl_init( &driver_funcs )) TRACE( \"Initialized EGL library\\n\" );\n    else if (force_glx) TRACE( \"Skipping EGL initialization because WINE_X11FORCEGLX is enabled\\n\" );\n\n    if ((status = user_driver->pOpenGLInit( WINE_OPENGL_DRIVER_VERSION, &display_funcs, &driver_funcs )))\n        WARN( \"Failed to initialize the driver OpenGL functions, status %#x\\n\", status );\n    if (!force_glx) init_egl_platforms( &display_funcs, driver_funcs );\n"""
 
-if old_display_funcs_init in win32u_opengl and "Skipping EGL initialization because WINE_X11FORCEGLX is enabled" not in win32u_opengl:
-    win32u_opengl = win32u_opengl.replace(old_display_funcs_init, new_display_funcs_init, 1)
+if old_forced_glx_display_funcs_init in win32u_opengl:
+    win32u_opengl = win32u_opengl.replace(old_forced_glx_display_funcs_init, old_display_funcs_init, 1)
+
+old_egl_config_filter = """    for (i = 0, j = 0; i < count; i++)\n    {\n        funcs->p_eglGetConfigAttrib( egl->display, configs[i], EGL_RENDERABLE_TYPE, &render );\n        if (render & EGL_OPENGL_BIT) configs[j++] = configs[i];\n    }\n    count = j;\n"""
+
+new_egl_config_filter = """    for (i = 0, j = 0; i < count; i++)\n    {\n        funcs->p_eglGetConfigAttrib( egl->display, configs[i], EGL_RENDERABLE_TYPE, &render );\n#ifdef __ANDROID__\n        if (render & (EGL_OPENGL_BIT | EGL_OPENGL_ES2_BIT)) configs[j++] = configs[i];\n#else\n        if (render & EGL_OPENGL_BIT) configs[j++] = configs[i];\n#endif\n    }\n    count = j;\n"""
+
+if old_egl_config_filter in win32u_opengl and "EGL_OPENGL_ES2_BIT" not in win32u_opengl:
+    win32u_opengl = win32u_opengl.replace(old_egl_config_filter, new_egl_config_filter, 1)
 
 win32u_opengl_path.write_text(win32u_opengl)
 PY
